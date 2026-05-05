@@ -60,6 +60,7 @@ DEFAULT_RSS_FEEDS = (
     "https://www.defensenews.com/arc/outboundfeeds/rss/category/naval/",
     "https://www.defensenews.com/arc/outboundfeeds/rss/category/unmanned/",
     "https://www.defensenews.com/arc/outboundfeeds/rss/category/industry/",
+    "https://www.oceansciencetechnology.com/news/feed/",
 )
 
 

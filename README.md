@@ -70,6 +70,8 @@ Enabled by default:
 - OpenAlex
 - Configurable RSS feeds
 
+Default RSS feeds include Naval News, MarineLink, Defense News, and Ocean Science & Technology.
+
 Optional paid/API-key sources:
 
 - IEEE Xplore, via `IEEE_XPLORE_API_KEY`
