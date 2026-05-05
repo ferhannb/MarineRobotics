@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import sys
 import tempfile
 import unittest
 from datetime import date, datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from maritime_autonomy_watch.markdown import parse_daily_items, render_daily_report
 from maritime_autonomy_watch.models import DailyReport, ReportItem, SourceStatus
