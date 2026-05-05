@@ -4,6 +4,7 @@ import re
 from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from .models import DailyReport, FailedSource, ReportItem, SourceStatus
 
@@ -16,22 +17,39 @@ SECTION_TITLES = {
 
 
 def render_daily_report(report: DailyReport, repository: str = "MarineRobotics") -> str:
+    counts = Counter(item.category for item in report.items)
     lines: list[str] = [
         f"# Maritime Autonomy Watch — {report.report_date.isoformat()}",
         "",
         "## Executive Summary",
         "",
         f"- Total selected items: {len(report.items)}",
-        f"- Academic papers: {sum(1 for item in report.items if item.category == 'academic')}",
-        f"- Industry/company news: {sum(1 for item in report.items if item.category == 'industry')}",
-        f"- Defense/naval autonomy news: {sum(1 for item in report.items if item.category == 'defense')}",
+        f"- Academic papers: {counts['academic']}",
+        f"- Industry/company news: {counts['industry']}",
+        f"- Defense/naval autonomy news: {counts['defense']}",
         f"- Failed/inaccessible sources: {len(report.failed_sources)}",
+        "",
+        "### Category Snapshot",
+        "",
+        "| Category | Selected items |",
+        "|---|---:|",
+        f"| Academic papers | {counts['academic']} |",
+        f"| Industry/company news | {counts['industry']} |",
+        f"| Defense/naval autonomy news | {counts['defense']} |",
+        "",
+        "## Contents",
+        "",
+        "- [Academic Papers](#academic-papers)",
+        "- [Industry and Company News](#industry-and-company-news)",
+        "- [Defense and Naval Autonomy News](#defense-and-naval-autonomy-news)",
+        "- [Source Status Summary](#source-status-summary)",
         "",
     ]
 
     for category, title in SECTION_TITLES.items():
         lines.extend([f"## {title}", ""])
         category_items = [item for item in report.items if item.category == category]
+        lines.extend([f"_Selected items: {len(category_items)}_", ""])
         if not category_items:
             lines.extend(["No selected items.", ""])
             continue
@@ -82,6 +100,24 @@ def render_weekly_report(
         f"- Defense/naval autonomy news: {counts['defense']}",
         f"- Failed/inaccessible sources: {len(failed_sources)}",
         "",
+        "### Weekly Snapshot",
+        "",
+        "| Category | Selected items |",
+        "|---|---:|",
+        f"| Academic papers | {counts['academic']} |",
+        f"| Industry/company news | {counts['industry']} |",
+        f"| Defense/naval autonomy news | {counts['defense']} |",
+        f"| Failed/inaccessible sources | {len(failed_sources)} |",
+        "",
+        "## Contents",
+        "",
+        "- [Main Signals This Week](#main-signals-this-week)",
+        "- [Top Academic Papers](#top-academic-papers)",
+        "- [Top Industry and Company News](#top-industry-and-company-news)",
+        "- [Top Defense and Naval Autonomy News](#top-defense-and-naval-autonomy-news)",
+        "- [Daily Reports Included](#daily-reports-included)",
+        "- [Source Status Summary](#source-status-summary)",
+        "",
         "## Main Signals This Week",
         "",
     ]
@@ -96,6 +132,7 @@ def render_weekly_report(
     for category, section_title in section_specs:
         lines.extend([f"## {section_title}", ""])
         top_items = [item for item in items if item.category == category][:max_items_per_section]
+        lines.extend([f"_Selected top items: {len(top_items)}_", ""])
         if not top_items:
             lines.extend(["No selected items.", ""])
             continue
@@ -132,7 +169,7 @@ def render_item(item: ReportItem) -> list[str]:
     lines = [
         f"### [{item.title}]({item.url})",
         "",
-        f"- Source: {item.source}",
+        f"- Source: {display_source(item.source)}",
         f"- Date: {item.date}",
         f"- Relevance score: {item.relevance_score:g}",
     ]
@@ -159,6 +196,13 @@ def render_item(item: ReportItem) -> list[str]:
         ]
     )
     return lines
+
+
+def display_source(source: str) -> str:
+    parsed = urlsplit(source)
+    if parsed.netloc:
+        return parsed.netloc.removeprefix("www.")
+    return source
 
 
 def render_failed_sources(failed_sources: tuple[FailedSource, ...]) -> list[str]:
