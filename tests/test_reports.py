@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import unittest
@@ -8,6 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from maritime_autonomy_watch import config
 from maritime_autonomy_watch.markdown import parse_daily_items, render_daily_report
 from maritime_autonomy_watch.models import DailyReport, ReportItem, SourceStatus
 from maritime_autonomy_watch.weekly import (
@@ -20,6 +22,26 @@ from maritime_autonomy_watch.weekly import (
 
 
 class ReportTests(unittest.TestCase):
+    def test_elsevier_api_key_prefers_elsevier_env(self) -> None:
+        previous_elsevier = os.environ.get("ELSEVIER_API_KEY")
+        previous_scopus = os.environ.get("SCOPUS_API_KEY")
+        try:
+            os.environ["ELSEVIER_API_KEY"] = "elsevier-key"
+            os.environ["SCOPUS_API_KEY"] = "scopus-key"
+            self.assertEqual(config.elsevier_api_key(), "elsevier-key")
+
+            del os.environ["ELSEVIER_API_KEY"]
+            self.assertEqual(config.elsevier_api_key(), "scopus-key")
+        finally:
+            if previous_elsevier is None:
+                os.environ.pop("ELSEVIER_API_KEY", None)
+            else:
+                os.environ["ELSEVIER_API_KEY"] = previous_elsevier
+            if previous_scopus is None:
+                os.environ.pop("SCOPUS_API_KEY", None)
+            else:
+                os.environ["SCOPUS_API_KEY"] = previous_scopus
+
     def test_release_names(self) -> None:
         self.assertEqual(release_tag_for_week("2026-W19"), "weekly-2026-W19")
         self.assertEqual(release_title_for_week("2026-W19"), "Maritime Autonomy Watch — Week 19, 2026")

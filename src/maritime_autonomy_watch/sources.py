@@ -11,7 +11,7 @@ from datetime import date
 from email.utils import parsedate_to_datetime
 from html import unescape
 
-from .config import KEYWORDS, SOURCE_LIMIT, configured_rss_feeds
+from .config import KEYWORDS, SOURCE_LIMIT, configured_rss_feeds, elsevier_api_key
 from .models import FailedSource, ReportItem, SourceStatus
 from .scoring import classify_item, relevance_score
 
@@ -176,9 +176,9 @@ def collect_ieee(report_date: date) -> tuple[list[ReportItem], SourceStatus]:
 
 
 def collect_scopus(report_date: date) -> tuple[list[ReportItem], SourceStatus]:
-    api_key = os.getenv("SCOPUS_API_KEY")
+    api_key = elsevier_api_key()
     if not api_key:
-        return [], SourceStatus("Elsevier Scopus", "disabled", "Missing SCOPUS_API_KEY")
+        return [], SourceStatus("Elsevier Scopus", "disabled", "Missing ELSEVIER_API_KEY or SCOPUS_API_KEY")
     query = urllib.parse.quote(" OR ".join(KEYWORDS[:5]))
     headers = {"X-ELS-APIKey": api_key, "Accept": "application/json"}
     data = fetch_json(f"https://api.elsevier.com/content/search/scopus?query={query}&count={SOURCE_LIMIT}", headers=headers)

@@ -1,6 +1,27 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
+
+def load_local_env(path: Path | str = ".env") -> None:
+    env_path = Path(path)
+    if not env_path.is_file():
+        return
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].strip()
+        name, value = line.split("=", 1)
+        name = name.strip()
+        value = value.strip().strip("'\"")
+        if name and name not in os.environ:
+            os.environ[name] = value
+
+
+load_local_env()
 
 
 DEFAULT_TIMEZONE = "Europe/Amsterdam"
@@ -47,3 +68,7 @@ def configured_rss_feeds() -> tuple[str, ...]:
     if not raw.strip():
         return DEFAULT_RSS_FEEDS
     return tuple(feed.strip() for feed in raw.split(",") if feed.strip())
+
+
+def elsevier_api_key() -> str:
+    return os.getenv("ELSEVIER_API_KEY") or os.getenv("SCOPUS_API_KEY", "")

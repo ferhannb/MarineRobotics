@@ -73,10 +73,18 @@ Enabled by default:
 Optional paid/API-key sources:
 
 - IEEE Xplore, via `IEEE_XPLORE_API_KEY`
-- Elsevier Scopus, via `SCOPUS_API_KEY`
+- Elsevier Scopus, via `ELSEVIER_API_KEY` or legacy `SCOPUS_API_KEY`
 - NewsAPI, via `NEWS_API_KEY`
 
 Missing optional keys do not fail the run. The report records those sources as disabled.
+
+For local runs, copy `.env.example` to `.env` and set your private keys there:
+
+```bash
+cp .env.example .env
+```
+
+The `.env` file is ignored by git and loaded automatically by the Python package.
 
 RSS feeds can be configured with a comma-separated environment variable:
 
