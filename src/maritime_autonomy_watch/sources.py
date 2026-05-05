@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -319,6 +320,7 @@ def reconstruct_openalex_abstract(index: dict[str, list[int]]) -> str:
 
 def clean_text(value: str) -> str:
     value = unescape(value or "")
+    value = re.sub(r"<[^>]+>", " ", value)
     return " ".join(value.replace("\n", " ").split())
 
 

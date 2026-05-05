@@ -15,20 +15,30 @@ DEDUPLICATION_METHOD = "DOI, canonical URL, source ID, and normalized title"
 KEYWORDS = (
     "maritime autonomy",
     "marine robotics",
+    "autonomous vessel",
+    "autonomous mission",
     "autonomous surface vessel",
     "autonomous underwater vehicle",
     "unmanned surface vehicle",
     "unmanned underwater vehicle",
+    "unmanned naval",
+    "unmanned systems",
     "naval autonomy",
+    "USV",
     "USV autonomy",
+    "AUV",
     "AUV navigation",
+    "UUV",
     "robotic perception marine",
     "underwater robotics",
 )
 
 DEFAULT_RSS_FEEDS = (
     "https://www.navalnews.com/feed/",
-    "https://news.mit.edu/rss/topic/robotics",
+    "https://www.marinelink.com/news/rss",
+    "https://www.defensenews.com/arc/outboundfeeds/rss/category/naval/",
+    "https://www.defensenews.com/arc/outboundfeeds/rss/category/unmanned/",
+    "https://www.defensenews.com/arc/outboundfeeds/rss/category/industry/",
 )
 
 
