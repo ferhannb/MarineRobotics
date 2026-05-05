@@ -4,6 +4,11 @@ Maritime Autonomy Watch publishes daily Markdown reports and weekly GitHub Relea
 
 ## Report Archive
 
+Latest daily report:
+
+- [2026-05-05 daily report](reports/daily/2026-05-05.md)
+- [GitHub Releases archive](https://github.com/ferhannb/MarineRobotics/releases)
+
 Daily reports are committed under:
 
 ```text
