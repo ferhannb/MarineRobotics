@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "maritime-autonomy-watch"
+version = "0.1.0"
+description = "Daily and weekly maritime autonomy intelligence reports."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Maritime Autonomy Watch" }
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

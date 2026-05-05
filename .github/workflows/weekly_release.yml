@@ -1,0 +1,58 @@
+name: Weekly Maritime Autonomy Release
+
+on:
+  schedule:
+    - cron: "30 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  weekly-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: Generate weekly report
+        run: |
+          python -m maritime_autonomy_watch.weekly
+
+      - name: Commit weekly report
+        run: |
+          git config user.name "maritime-autonomy-watch-bot"
+          git config user.email "maritime-autonomy-watch-bot@users.noreply.github.com"
+          git add reports/weekly
+          git commit -m "Add weekly maritime autonomy report" || echo "No changes to commit"
+          git push
+
+      - name: Create weekly release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          WEEK_FILE=$(ls -t reports/weekly/*.md | head -n 1)
+          WEEK_NAME=$(basename "$WEEK_FILE" .md)
+          WEEK_TAG="weekly-$WEEK_NAME"
+          WEEK_NUM="${WEEK_NAME#*-W}"
+          WEEK_YEAR="${WEEK_NAME%-W*}"
+          WEEK_TITLE="Maritime Autonomy Watch — Week $WEEK_NUM, $WEEK_YEAR"
+
+          if gh release view "$WEEK_TAG" >/dev/null 2>&1; then
+            echo "Release $WEEK_TAG already exists."
+          else
+            gh release create "$WEEK_TAG" \
+              --title "$WEEK_TITLE" \
+              --notes-file "$WEEK_FILE"
+          fi
