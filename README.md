@@ -70,7 +70,7 @@ Enabled by default:
 - OpenAlex
 - Configurable RSS feeds
 
-Default news sources include Naval News, MarineLink, Defense News, Ocean Science & Technology, MASSworld, Ocean News, and SMI MASG News.
+Default news sources include Naval News, MarineLink, Defense News, Ocean Science & Technology, MASSworld, Ocean News, Naval Technology, and SMI MASG News.
 
 Optional paid/API-key sources:
 

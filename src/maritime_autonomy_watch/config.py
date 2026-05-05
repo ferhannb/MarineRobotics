@@ -63,6 +63,7 @@ DEFAULT_RSS_FEEDS = (
     "https://www.oceansciencetechnology.com/news/feed/",
     "https://massworld.news/feed/",
     "https://oceannews.com/feed/",
+    "https://www.naval-technology.com/feed/",
 )
 
 
