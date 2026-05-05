@@ -7,9 +7,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
-from datetime import date
+from datetime import date, datetime
 from email.utils import parsedate_to_datetime
 from html import unescape
+from html.parser import HTMLParser
 
 from .config import KEYWORDS, SOURCE_LIMIT, configured_rss_feeds, elsevier_api_key
 from .models import FailedSource, ReportItem, SourceStatus
@@ -25,6 +26,7 @@ def collect_items(report_date: date) -> tuple[list[ReportItem], list[FailedSourc
         ("arXiv", collect_arxiv),
         ("OpenAlex", collect_openalex),
         ("RSS feeds", collect_rss),
+        ("SMI MASG News", collect_masg_news),
         ("IEEE Xplore", collect_ieee),
         ("Elsevier Scopus", collect_scopus),
         ("NewsAPI", collect_newsapi),
@@ -136,6 +138,13 @@ def collect_rss(report_date: date) -> tuple[list[ReportItem], SourceStatus]:
     if failures:
         notes = f"{notes}; failures: {'; '.join(failures[:3])}"
     return items, SourceStatus("RSS feeds", status, notes)
+
+
+def collect_masg_news(report_date: date) -> tuple[list[ReportItem], SourceStatus]:
+    url = "https://www.maritimeindustries.org/specialist-groups/maritime-autonomous-systems-group/masg-news"
+    html = fetch_text(url)
+    items = parse_masg_news(html, report_date)
+    return items, SourceStatus("SMI MASG News", "enabled", f"HTML source, {len(items)} items fetched")
 
 
 def collect_ieee(report_date: date) -> tuple[list[ReportItem], SourceStatus]:
@@ -284,11 +293,97 @@ def parse_feed(root: ET.Element, feed_url: str, report_date: date) -> list[Repor
     return items
 
 
+class MasgNewsParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.items: list[dict[str, str]] = []
+        self.current: dict[str, str] | None = None
+        self.capture: str | None = None
+        self.in_heading = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attrs_dict = {name: value or "" for name, value in attrs}
+        classes = set(attrs_dict.get("class", "").split())
+        if tag == "div" and "news-outer" in classes:
+            self._finalize_current()
+            self.current = {"date": "", "title": "", "url": "", "summary": ""}
+            return
+        if self.current is None:
+            return
+        if tag == "span" and "date" in classes:
+            self.capture = "date"
+        elif tag == "h3":
+            self.in_heading = True
+        elif tag == "a" and self.in_heading:
+            self.current["url"] = attrs_dict.get("href", "")
+            self.capture = "title"
+        elif tag == "p":
+            self.capture = "summary"
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"span", "a", "p"}:
+            self.capture = None
+        if tag == "h3":
+            self.in_heading = False
+
+    def handle_data(self, data: str) -> None:
+        if self.current is None or self.capture is None:
+            return
+        self.current[self.capture] = clean_text(f"{self.current[self.capture]} {data}")
+
+    def close(self) -> None:
+        super().close()
+        self._finalize_current()
+
+    def _finalize_current(self) -> None:
+        if self.current and self.current.get("title") and self.current.get("url"):
+            self.items.append(self.current)
+        self.current = None
+        self.capture = None
+        self.in_heading = False
+
+
+def parse_masg_news(html: str, report_date: date) -> list[ReportItem]:
+    parser = MasgNewsParser()
+    parser.feed(html)
+    parser.close()
+    items: list[ReportItem] = []
+    for entry in parser.items[:SOURCE_LIMIT]:
+        title = clean_text(entry.get("title", ""))
+        summary = clean_text(entry.get("summary", ""))
+        source = "maritimeindustries.org"
+        score = relevance_score(title, summary, source)
+        items.append(
+            ReportItem(
+                title=title,
+                url=entry.get("url", ""),
+                source=source,
+                date=parse_masg_date(entry.get("date", ""), report_date),
+                category=classify_item(title, summary, source),
+                relevance_score=score,
+                summary=summary,
+            )
+        )
+    return items
+
+
 def fetch_json(url: str, headers: dict[str, str] | None = None) -> dict:
     request = urllib.request.Request(url, headers={"User-Agent": "maritime-autonomy-watch/0.1", **(headers or {})})
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"HTTP {exc.code} for {url}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Network error for {url}: {exc.reason}") from exc
+
+
+def fetch_text(url: str) -> str:
+    request = urllib.request.Request(url, headers={"User-Agent": "maritime-autonomy-watch/0.1"})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            charset = response.headers.get_content_charset() or "utf-8"
+            return response.read().decode(charset, errors="replace")
     except urllib.error.HTTPError as exc:
         raise RuntimeError(f"HTTP {exc.code} for {url}") from exc
     except urllib.error.URLError as exc:
@@ -331,3 +426,12 @@ def parse_pub_date(value: str, fallback: date) -> str:
         return parsedate_to_datetime(value).date().isoformat()
     except (TypeError, ValueError):
         return value[:10]
+
+
+def parse_masg_date(value: str, fallback: date) -> str:
+    if not value:
+        return fallback.isoformat()
+    try:
+        return datetime.strptime(value.strip(), "%d %B %Y").date().isoformat()
+    except ValueError:
+        return fallback.isoformat()

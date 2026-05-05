@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from maritime_autonomy_watch import config
 from maritime_autonomy_watch.markdown import parse_daily_items, render_daily_report
 from maritime_autonomy_watch.models import DailyReport, ReportItem, SourceStatus
+from maritime_autonomy_watch.sources import parse_masg_news
 from maritime_autonomy_watch.weekly import (
     daily_paths_for_week,
     generate_weekly_report,
@@ -115,6 +116,22 @@ class ReportTests(unittest.TestCase):
             self.assertIn("# Maritime Autonomy Watch — Week 2026-W19", markdown)
             self.assertIn("Naval Autonomous Underwater Vehicle Trial", markdown)
             self.assertIn("[2026-05-05](../daily/2026-05-05.md)", markdown)
+
+    def test_parse_masg_news(self) -> None:
+        html = """
+        <div class="news-outer">
+          <div class="cont-outer">
+            <span class="date">23 April 2026</span>
+            <h3><a href="https://www.maritimeindustries.org/news/example">Autonomous Vessel Trial Announced</a></h3>
+            <p>A maritime autonomy company announced a new uncrewed surface vessel trial.</p>
+          </div>
+        </div>
+        """
+        items = parse_masg_news(html, date(2026, 5, 5))
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].title, "Autonomous Vessel Trial Announced")
+        self.assertEqual(items[0].date, "2026-04-23")
+        self.assertEqual(items[0].source, "maritimeindustries.org")
 
 
 if __name__ == "__main__":
