@@ -98,6 +98,18 @@ class ReportTests(unittest.TestCase):
             ),
             4.0,
         )
+        self.assertGreater(
+            relevance_score(
+                "A hybrid APF-DQN framework with transformer-based current prediction for USV path planning",
+                "",
+                "Elsevier Scopus",
+            ),
+            relevance_score(
+                "A hybrid APF-DQN framework with transformer-based current prediction for AUV path planning",
+                "",
+                "Elsevier Scopus",
+            ),
+        )
 
     def test_daily_selection_keeps_relevant_scopus_item(self) -> None:
         items = [
