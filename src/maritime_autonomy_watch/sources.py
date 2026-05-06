@@ -188,9 +188,16 @@ def collect_scopus(report_date: date) -> tuple[list[ReportItem], SourceStatus]:
     api_key = elsevier_api_key()
     if not api_key:
         return [], SourceStatus("Elsevier Scopus", "disabled", "Missing ELSEVIER_API_KEY or SCOPUS_API_KEY")
-    query = urllib.parse.quote(" OR ".join(KEYWORDS[:5]))
+    query = " OR ".join(f'TITLE-ABS-KEY("{keyword}")' for keyword in KEYWORDS)
+    params = urllib.parse.urlencode(
+        {
+            "query": query,
+            "count": SOURCE_LIMIT,
+            "sort": "-coverDate",
+        }
+    )
     headers = {"X-ELS-APIKey": api_key, "Accept": "application/json"}
-    data = fetch_json(f"https://api.elsevier.com/content/search/scopus?query={query}&count={SOURCE_LIMIT}", headers=headers)
+    data = fetch_json(f"https://api.elsevier.com/content/search/scopus?{params}", headers=headers)
     items: list[ReportItem] = []
     for entry in (data.get("search-results") or {}).get("entry", []):
         title = clean_text(entry.get("dc:title") or "")

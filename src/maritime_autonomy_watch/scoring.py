@@ -30,6 +30,18 @@ def relevance_score(title: str, summary: str, source: str = "") -> float:
     for token in ("autonomous", "autonomy", "robot", "unmanned", "marine", "maritime", "underwater", "surface vessel"):
         if token in text:
             score += 0.75
+    for acronym in ("auv", "auvs", "usv", "usvs", "uuv", "uuvs"):
+        if re.search(rf"\b{acronym}\b", text):
+            score += 1.5
+    for phrase in (
+        "path planning",
+        "trajectory tracking",
+        "formation tracking",
+        "position control",
+        "obstacle avoidance",
+    ):
+        if phrase in text:
+            score += 0.75
     return min(10.0, round(score, 2))
 
 

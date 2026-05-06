@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from maritime_autonomy_watch import config
 from maritime_autonomy_watch.markdown import parse_daily_items, render_daily_report
 from maritime_autonomy_watch.models import DailyReport, ReportItem, SourceStatus
+from maritime_autonomy_watch.daily import select_daily_items
 from maritime_autonomy_watch.sources import parse_masg_news
 from maritime_autonomy_watch.weekly import (
     daily_paths_for_week,
@@ -20,6 +21,7 @@ from maritime_autonomy_watch.weekly import (
     release_tag_for_week,
     release_title_for_week,
 )
+from maritime_autonomy_watch.scoring import relevance_score
 
 
 class ReportTests(unittest.TestCase):
@@ -86,6 +88,53 @@ class ReportTests(unittest.TestCase):
             (daily / "2026-05-06.md").write_text("x", encoding="utf-8")
             paths = daily_paths_for_week(daily, 2026, 19)
             self.assertEqual([path.name for path in paths], ["2026-05-04.md", "2026-05-06.md"])
+
+    def test_title_only_auv_and_usv_papers_clear_threshold(self) -> None:
+        self.assertGreaterEqual(
+            relevance_score(
+                "Event-triggered prescribed-time position control for AUVs with input constraints",
+                "",
+                "Elsevier Scopus",
+            ),
+            4.0,
+        )
+
+    def test_daily_selection_keeps_relevant_scopus_item(self) -> None:
+        items = [
+            ReportItem(
+                title=f"High scoring arXiv paper {index}",
+                url=f"https://example.com/arxiv/{index}",
+                source="arXiv",
+                date="2026-05-06",
+                category="academic",
+                relevance_score=5.0,
+            )
+            for index in range(config.DAILY_MAX_ITEMS)
+        ]
+        items.append(
+            ReportItem(
+                title="Digital twin-driven swarm of autonomous underwater vehicles for marine exploration",
+                url="https://example.com/scopus",
+                source="Elsevier Scopus",
+                date="2026-05-06",
+                category="academic",
+                relevance_score=4.25,
+                doi="10.123/scopus",
+            )
+        )
+
+        selected = select_daily_items(items)
+
+        self.assertEqual(len(selected), config.DAILY_MAX_ITEMS)
+        self.assertTrue(any(item.source == "Elsevier Scopus" for item in selected))
+        self.assertGreaterEqual(
+            relevance_score(
+                "A hybrid APF-DQN framework with transformer-based current prediction for USV path planning",
+                "",
+                "Elsevier Scopus",
+            ),
+            4.0,
+        )
 
     def test_generate_weekly_report_from_daily_files(self) -> None:
         item = ReportItem(
