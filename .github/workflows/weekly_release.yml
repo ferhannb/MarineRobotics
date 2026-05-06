@@ -26,23 +26,39 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install .
 
-      - name: Generate weekly report
-        run: |
-          python -m maritime_autonomy_watch.weekly
-
-      - name: Commit weekly report
-        run: |
-          git config user.name "maritime-autonomy-watch-bot"
-          git config user.email "maritime-autonomy-watch-bot@users.noreply.github.com"
-          git add reports/weekly
-          git commit -m "Add weekly maritime autonomy report" || echo "No changes to commit"
-          git push
-
-      - name: Create weekly release
+      - name: Download daily release notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          WEEK_FILE=$(ls -t reports/weekly/*.md | head -n 1)
+          mkdir -p reports/daily
+          python - <<'PY' > daily-release-tags.txt
+          from datetime import date, timedelta
+
+          previous_week_day = date.today() - timedelta(days=7)
+          iso = previous_week_day.isocalendar()
+          start = date.fromisocalendar(iso.year, iso.week, 1)
+          for offset in range(7):
+              report_date = start + timedelta(days=offset)
+              print(f"{report_date.isoformat()} daily-{report_date.isoformat()}")
+          PY
+
+          while read -r REPORT_DATE REPORT_TAG; do
+            if gh release view "$REPORT_TAG" --json body --jq .body > "reports/daily/$REPORT_DATE.md"; then
+              echo "Downloaded $REPORT_TAG"
+            else
+              echo "No daily release found for $REPORT_DATE"
+            fi
+          done < daily-release-tags.txt
+
+      - name: Generate weekly report
+        run: |
+          python -m maritime_autonomy_watch.weekly | tee weekly-report-path.txt
+
+      - name: Publish weekly release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          WEEK_FILE=$(tail -n 1 weekly-report-path.txt)
           WEEK_NAME=$(basename "$WEEK_FILE" .md)
           WEEK_TAG="weekly-$WEEK_NAME"
           WEEK_NUM="${WEEK_NAME#*-W}"
@@ -50,7 +66,9 @@ jobs:
           WEEK_TITLE="Maritime Autonomy Watch — Week $WEEK_NUM, $WEEK_YEAR"
 
           if gh release view "$WEEK_TAG" >/dev/null 2>&1; then
-            echo "Release $WEEK_TAG already exists."
+            gh release edit "$WEEK_TAG" \
+              --title "$WEEK_TITLE" \
+              --notes-file "$WEEK_FILE"
           else
             gh release create "$WEEK_TAG" \
               --title "$WEEK_TITLE" \

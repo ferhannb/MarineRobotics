@@ -84,7 +84,7 @@ def render_weekly_report(
     source_statuses: list[SourceStatus],
     relevance_threshold: float,
     deduplication_method: str,
-    repository: str = "MarineRobotics",
+    repository: str = "ferhannb/MarineRobotics",
     max_items_per_section: int = 5,
 ) -> str:
     counts = Counter(item.category for item in items)
@@ -143,7 +143,7 @@ def render_weekly_report(
     if daily_paths:
         for path in daily_paths:
             report_date = path.stem
-            lines.append(f"- [{report_date}](../daily/{path.name})")
+            lines.append(f"- [{report_date}](https://github.com/{repository}/releases/tag/daily-{report_date})")
     else:
         lines.append("- No daily reports found for this week.")
     lines.append("")

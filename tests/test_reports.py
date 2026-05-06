@@ -115,7 +115,10 @@ class ReportTests(unittest.TestCase):
             markdown = output.read_text(encoding="utf-8")
             self.assertIn("# Maritime Autonomy Watch — Week 2026-W19", markdown)
             self.assertIn("Naval Autonomous Underwater Vehicle Trial", markdown)
-            self.assertIn("[2026-05-05](../daily/2026-05-05.md)", markdown)
+            self.assertIn(
+                "[2026-05-05](https://github.com/ferhannb/MarineRobotics/releases/tag/daily-2026-05-05)",
+                markdown,
+            )
 
     def test_parse_masg_news(self) -> None:
         html = """

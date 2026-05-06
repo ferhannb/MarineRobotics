@@ -1,24 +1,18 @@
 # Maritime Autonomy Watch
 
-Maritime Autonomy Watch publishes daily Markdown reports and weekly GitHub Release archive snapshots for maritime autonomy, marine robotics, unmanned surface and underwater systems, and naval autonomy.
+Maritime Autonomy Watch publishes daily and weekly GitHub Release notes for maritime autonomy, marine robotics, unmanned surface and underwater systems, and naval autonomy.
 
 ## Report Archive
 
-Latest daily report:
+Report releases:
 
-- [2026-05-05 daily report](reports/daily/2026-05-05.md)
 - [GitHub Releases archive](https://github.com/ferhannb/MarineRobotics/releases)
 
-Daily reports are committed under:
+Daily GitHub Releases use:
 
 ```text
-reports/daily/YYYY-MM-DD.md
-```
-
-Weekly summaries are committed under:
-
-```text
-reports/weekly/YYYY-Www.md
+tag: daily-YYYY-MM-DD
+title: Maritime Autonomy Watch — YYYY-MM-DD
 ```
 
 Weekly GitHub Releases use:
@@ -28,11 +22,11 @@ tag: weekly-YYYY-Www
 title: Maritime Autonomy Watch — Week ww, YYYY
 ```
 
-Daily reports are the detailed logs. Weekly reports summarize and index the week instead of duplicating all daily content.
+Daily releases are the detailed logs. Weekly releases summarize and index the week instead of duplicating all daily content.
 
 ## Running Locally
 
-Generate today's daily report:
+Generate today's daily report file locally:
 
 ```bash
 python -m maritime_autonomy_watch.daily
@@ -96,9 +90,9 @@ MARITIME_WATCH_RSS_FEEDS="https://example.com/feed.xml,https://example.org/rss"
 
 ## GitHub Actions
 
-`.github/workflows/daily_report.yml` runs every morning Amsterdam time and commits a daily report.
+`.github/workflows/daily_report.yml` runs every morning Amsterdam time and publishes the daily report as a GitHub Release. If the release already exists, the workflow updates its notes.
 
-`.github/workflows/weekly_release.yml` runs Monday morning Amsterdam time, commits the weekly report, and creates a GitHub Release. If the release already exists, the workflow exits successfully.
+`.github/workflows/weekly_release.yml` runs Monday morning Amsterdam time, rebuilds the week from daily release notes, and publishes the weekly report as a GitHub Release. If the release already exists, the workflow updates its notes.
 
 Both workflows also support manual execution through `workflow_dispatch`.
 
