@@ -10,6 +10,18 @@ from .models import ReportItem
 ACADEMIC_HINTS = ("arxiv", "openalex", "doi", "journal", "conference", "paper")
 DEFENSE_HINTS = ("naval", "navy", "defense", "defence", "military", "darpa", "fleet", "warfare")
 INDUSTRY_HINTS = ("company", "startup", "contract", "product", "launch", "funding", "shipyard")
+USV_TERMS_RE = re.compile(r"\busvs?\b")
+USV_DIRECT_TOPICS = (
+    "path planning",
+    "path following",
+    "path tracking",
+    "route planning",
+    "motion planning",
+    "trajectory",
+    "trajectory tracking",
+    "trajectory planning",
+    "trajectory optimization",
+)
 
 
 def normalize_title(title: str) -> str:
@@ -45,6 +57,8 @@ def relevance_score(title: str, summary: str, source: str = "") -> float:
     ):
         if phrase in text:
             score += 0.75
+    if USV_TERMS_RE.search(text) and any(topic in text for topic in USV_DIRECT_TOPICS):
+        score += 2.0
     return min(10.0, round(score, 2))
 
 

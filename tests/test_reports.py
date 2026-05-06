@@ -111,6 +111,24 @@ class ReportTests(unittest.TestCase):
             ),
         )
 
+    def test_usv_path_or_trajectory_work_is_directly_relevant(self) -> None:
+        self.assertGreaterEqual(
+            relevance_score(
+                "USV trajectory optimization under dynamic ocean currents",
+                "",
+                "Elsevier Scopus",
+            ),
+            4.0,
+        )
+        self.assertGreaterEqual(
+            relevance_score(
+                "Adaptive guidance for unmanned vehicles",
+                "The proposed method improves USV path trajectory tracking in constrained waters.",
+                "Elsevier Scopus",
+            ),
+            4.0,
+        )
+
     def test_daily_selection_keeps_relevant_scopus_item(self) -> None:
         items = [
             ReportItem(
