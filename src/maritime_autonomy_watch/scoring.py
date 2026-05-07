@@ -48,13 +48,18 @@ def deduplicate_items(items: list[ReportItem]) -> list[ReportItem]:
     seen: set[str] = set()
     unique: list[ReportItem] = []
     for item in sorted(items, key=lambda candidate: candidate.relevance_score, reverse=True):
-        keys = {normalize_title(item.title)}
-        if item.doi:
-            keys.add(f"doi:{item.doi.lower()}")
-        if item.url:
-            keys.add(f"url:{canonical_url(item.url)}")
+        keys = item_identity_keys(item)
         if seen.intersection(keys):
             continue
         seen.update(keys)
         unique.append(item)
     return unique
+
+
+def item_identity_keys(item: ReportItem) -> set[str]:
+    keys = {f"title:{normalize_title(item.title)}"}
+    if item.doi:
+        keys.add(f"doi:{item.doi.lower()}")
+    if item.url:
+        keys.add(f"url:{canonical_url(item.url)}")
+    return keys

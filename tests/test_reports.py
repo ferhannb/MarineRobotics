@@ -10,6 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from maritime_autonomy_watch import config
+from maritime_autonomy_watch.daily import select_daily_items
 from maritime_autonomy_watch.markdown import parse_daily_items, render_daily_report
 from maritime_autonomy_watch.models import DailyReport, ReportItem, SourceStatus
 from maritime_autonomy_watch.sources import parse_masg_news
@@ -86,6 +87,44 @@ class ReportTests(unittest.TestCase):
             (daily / "2026-05-06.md").write_text("x", encoding="utf-8")
             paths = daily_paths_for_week(daily, 2026, 19)
             self.assertEqual([path.name for path in paths], ["2026-05-04.md", "2026-05-06.md"])
+
+    def test_daily_selection_skips_recently_reported_items(self) -> None:
+        repeated = ReportItem(
+            title="Repeated Autonomous Surface Vessel Planning",
+            url="https://example.com/repeated",
+            source="arXiv",
+            date="2026-05-05",
+            category="academic",
+            relevance_score=9,
+            abstract="Already reported.",
+        )
+        fresh = ReportItem(
+            title="Fresh Underwater Robotics Navigation",
+            url="https://example.com/fresh",
+            source="OpenAlex",
+            date="2026-05-06",
+            category="academic",
+            relevance_score=8,
+            abstract="New item.",
+        )
+        old_report = DailyReport(
+            report_date=date(2026, 5, 5),
+            generated_at=datetime(2026, 5, 5, 9, 0),
+            items=(repeated,),
+            failed_sources=(),
+            source_statuses=(),
+            relevance_threshold=4.0,
+            deduplication_method="test",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            daily = root / "daily"
+            daily.mkdir()
+            (daily / "2026-05-05.md").write_text(render_daily_report(old_report), encoding="utf-8")
+
+            selected = select_daily_items([repeated, fresh], reports_root=root, report_date=date(2026, 5, 6))
+
+        self.assertEqual([item.title for item in selected], ["Fresh Underwater Robotics Navigation"])
 
     def test_generate_weekly_report_from_daily_files(self) -> None:
         item = ReportItem(
