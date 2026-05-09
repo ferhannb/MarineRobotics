@@ -29,10 +29,13 @@ DEFAULT_TIMEZONE = "Europe/Amsterdam"
 RELEVANCE_THRESHOLD = float(os.getenv("MARITIME_WATCH_RELEVANCE_THRESHOLD", "4.0"))
 SOURCE_LIMIT = int(os.getenv("MARITIME_WATCH_SOURCE_LIMIT", "15"))
 DAILY_MAX_ITEMS = int(os.getenv("MARITIME_WATCH_DAILY_MAX_ITEMS", "24"))
+DAILY_MAX_ITEMS_PER_CATEGORY = int(os.getenv("MARITIME_WATCH_DAILY_MAX_ITEMS_PER_CATEGORY", "8"))
 DAILY_HISTORY_LOOKBACK_DAYS = int(os.getenv("MARITIME_WATCH_DAILY_HISTORY_LOOKBACK_DAYS", "14"))
 WEEKLY_MAX_ITEMS_PER_SECTION = int(os.getenv("MARITIME_WATCH_WEEKLY_MAX_ITEMS_PER_SECTION", "5"))
 
-DEDUPLICATION_METHOD = "DOI, canonical URL, source ID, normalized title, and recent daily report history"
+DEDUPLICATION_METHOD = (
+    "DOI, canonical URL, source ID, normalized title, similar recent titles, category caps, and novelty score"
+)
 
 KEYWORDS = (
     "maritime autonomy",

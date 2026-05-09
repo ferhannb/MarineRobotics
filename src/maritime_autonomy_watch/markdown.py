@@ -382,12 +382,7 @@ def source_problem_count(source_statuses: tuple[SourceStatus, ...]) -> int:
 
 
 ITEM_RE = re.compile(
-    r"^### \[(?P<title>[^\]]+)\]\((?P<url>[^)]+)\)\n\n"
-    r"(?P<meta>(?:- .+\n)+)\n"
-    r"\*\*(?:Abstract|Summary)\*\*\n\n"
-    r"(?P<body>.*?)\n\n"
-    r"\*\*Why it matters\*\*\n\n"
-    r"(?P<why>.*?)\n\n---",
+    r"^### \[(?P<title>[^\]]+)\]\((?P<url>[^\n]+)\)\n(?P<body>.*?)(?=^### |\Z)",
     re.MULTILINE | re.DOTALL,
 )
 
@@ -406,19 +401,22 @@ def parse_daily_items(markdown: str) -> list[ReportItem]:
             current_category = "defense"
             continue
         for match in ITEM_RE.finditer(chunk):
-            meta = parse_meta(match.group("meta"))
+            body = match.group("body").strip()
+            meta = parse_meta(body)
             authors = tuple(part.strip() for part in meta.get("Authors", "").split(",") if part.strip())
+            summary = extract_item_subsection(body, "Abstract") or extract_item_subsection(body, "Summary")
+            why_it_matters = extract_item_subsection(body, "Why it matters")
             items.append(
                 ReportItem(
                     title=match.group("title").strip(),
-                    url=match.group("url").strip(),
+                    url=match.group("url").strip().rstrip(")"),
                     source=meta.get("Source", ""),
                     date=meta.get("Date", ""),
                     category=current_category,
                     relevance_score=float(meta.get("Relevance score", "0") or 0),
-                    summary=match.group("body").strip(),
-                    abstract=match.group("body").strip() if current_category == "academic" else "",
-                    why_it_matters=match.group("why").strip(),
+                    summary=summary,
+                    abstract=summary if current_category == "academic" else "",
+                    why_it_matters=why_it_matters,
                     authors=authors,
                     doi=meta.get("DOI", ""),
                 )
@@ -462,3 +460,12 @@ def parse_meta(meta_block: str) -> dict[str, str]:
         key, _, value = line[2:].partition(":")
         meta[key.strip()] = value.strip()
     return meta
+
+
+def extract_item_subsection(markdown: str, title: str) -> str:
+    match = re.search(
+        rf"^\*\*{re.escape(title)}\*\*\n\n(?P<body>.*?)(?=^\*\*Why it matters\*\*|^---|\Z)",
+        markdown,
+        re.MULTILINE | re.DOTALL,
+    )
+    return match.group("body").strip() if match else ""

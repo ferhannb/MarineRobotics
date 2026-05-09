@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import replace
+import math
+import re
+from collections import Counter
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -9,6 +12,7 @@ from zoneinfo import ZoneInfo
 from .config import (
     DAILY_HISTORY_LOOKBACK_DAYS,
     DAILY_MAX_ITEMS,
+    DAILY_MAX_ITEMS_PER_CATEGORY,
     DEDUPLICATION_METHOD,
     DEFAULT_TIMEZONE,
     RELEVANCE_THRESHOLD,
@@ -23,6 +27,36 @@ ACADEMIC_API_SOURCES = ("arXiv", "OpenAlex", "IEEE Xplore", "Elsevier Scopus")
 NEWS_MAX_AGE_DAYS = 45
 ACADEMIC_MAX_AGE_DAYS = 180
 STALE_HIGH_RELEVANCE_SCORE = 8.0
+RECENT_ITEM_BONUS_DAYS = 14
+SIMILAR_TITLE_THRESHOLD = 0.5
+NOVEL_UNIQUE_RELEVANCE_FLOOR = 3.0
+TITLE_STOPWORDS = {
+    "and",
+    "autonomous",
+    "autonomy",
+    "for",
+    "from",
+    "high",
+    "into",
+    "item",
+    "items",
+    "marine",
+    "maritime",
+    "of",
+    "on",
+    "paper",
+    "scoring",
+    "the",
+    "to",
+    "using",
+    "with",
+}
+
+
+@dataclass(frozen=True)
+class HistoricalItems:
+    keys: set[str]
+    signature_tokens: tuple[frozenset[str], ...]
 
 
 def generate_daily_report(report_date=None, reports_root: Path | str = "reports") -> Path:
@@ -56,7 +90,7 @@ def select_daily_items(items, reports_root: Path | str = "reports", report_date:
     candidates = [
         polish_item(item)
         for item in deduplicate_items(items)
-        if item.relevance_score >= RELEVANCE_THRESHOLD
+        if item.relevance_score >= NOVEL_UNIQUE_RELEVANCE_FLOOR
         and item.title
         and item.url
         and is_fresh_enough(item, report_date)
@@ -64,11 +98,17 @@ def select_daily_items(items, reports_root: Path | str = "reports", report_date:
     if report_date is None:
         report_date = datetime.now(ZoneInfo(DEFAULT_TIMEZONE)).date()
 
-    history_keys = historical_item_keys(
+    history = historical_items(
         recent_daily_paths(Path(reports_root) / "daily", report_date, DAILY_HISTORY_LOOKBACK_DAYS)
     )
-    candidates = [item for item in candidates if item_identity_keys(item).isdisjoint(history_keys)]
-    selected = candidates[:DAILY_MAX_ITEMS]
+    candidates = [
+        item
+        for item in candidates
+        if item_identity_keys(item).isdisjoint(history.keys)
+        and not is_similar_to_any_signature(item_signature_tokens(item), history.signature_tokens)
+    ]
+    candidates = sorted(candidates, key=lambda item: novelty_score(item, report_date), reverse=True)
+    selected = balanced_daily_selection(candidates)
 
     for source in ACADEMIC_API_SOURCES:
         if any(item.source == source for item in selected):
@@ -76,13 +116,55 @@ def select_daily_items(items, reports_root: Path | str = "reports", report_date:
         candidate = next((item for item in candidates if item.source == source), None)
         if candidate is None:
             continue
-        if len(selected) < DAILY_MAX_ITEMS:
+        category_counts = Counter(item.category for item in selected)
+        if len(selected) < DAILY_MAX_ITEMS and category_counts[candidate.category] < DAILY_MAX_ITEMS_PER_CATEGORY:
             selected.append(candidate)
         elif selected:
-            selected[-1] = candidate
-        selected = sorted(selected, key=lambda item: item.relevance_score, reverse=True)
+            replace_index = lowest_ranked_index(selected, category=candidate.category)
+            if replace_index is not None:
+                selected[replace_index] = candidate
+        selected = sorted(selected, key=lambda item: novelty_score(item, report_date), reverse=True)
 
     return selected
+
+
+def balanced_daily_selection(candidates: list[ReportItem]) -> list[ReportItem]:
+    selected: list[ReportItem] = []
+    category_counts: Counter[str] = Counter()
+    selected_signatures: list[frozenset[str]] = []
+    for item in candidates:
+        if len(selected) >= DAILY_MAX_ITEMS:
+            break
+        if category_counts[item.category] >= DAILY_MAX_ITEMS_PER_CATEGORY:
+            continue
+        if is_similar_to_any_signature(item_signature_tokens(item), tuple(selected_signatures)):
+            continue
+        selected.append(item)
+        selected_signatures.append(item_signature_tokens(item))
+        category_counts[item.category] += 1
+    return selected
+
+
+def lowest_ranked_index(items: list[ReportItem], category: str) -> int | None:
+    candidates = [(index, item) for index, item in enumerate(items) if item.category == category]
+    if not candidates:
+        return None
+    index, _ = min(candidates, key=lambda pair: pair[1].relevance_score)
+    return index
+
+
+def novelty_score(item: ReportItem, report_date: date) -> float:
+    score = item.relevance_score
+    item_date = parse_item_date(item.date)
+    if item_date is None:
+        return score
+    age_days = max(0, (report_date - item_date).days)
+    score += max(0.0, (RECENT_ITEM_BONUS_DAYS - age_days) / RECENT_ITEM_BONUS_DAYS)
+    if item.category != "academic" and age_days <= 7:
+        score += 0.5
+    if age_days > 60:
+        score -= math.log10(age_days - 59)
+    return round(score, 3)
 
 
 def polish_item(item: ReportItem) -> ReportItem:
@@ -134,8 +216,9 @@ def recent_daily_paths(daily_dir: Path, report_date: date, lookback_days: int) -
     return paths
 
 
-def historical_item_keys(paths: list[Path]) -> set[str]:
+def historical_items(paths: list[Path]) -> HistoricalItems:
     keys: set[str] = set()
+    historical_signatures: list[frozenset[str]] = []
     for path in paths:
         try:
             markdown = path.read_text(encoding="utf-8")
@@ -143,7 +226,46 @@ def historical_item_keys(paths: list[Path]) -> set[str]:
             continue
         for item in parse_daily_items(markdown):
             keys.update(item_identity_keys(item))
-    return keys
+            historical_signatures.append(item_signature_tokens(item))
+    return HistoricalItems(keys=keys, signature_tokens=tuple(historical_signatures))
+
+
+def historical_item_keys(paths: list[Path]) -> set[str]:
+    return historical_items(paths).keys
+
+
+def title_tokens(title: str) -> frozenset[str]:
+    tokens = {
+        token
+        for token in re.findall(r"[a-z0-9]+", title.lower())
+        if (len(token) > 2 or token.isdigit()) and token not in TITLE_STOPWORDS
+    }
+    return frozenset(tokens)
+
+
+def title_similarity(left: frozenset[str], right: frozenset[str]) -> float:
+    if not left or not right:
+        return 0.0
+    intersection = len(left.intersection(right))
+    if intersection < 3:
+        return 0.0
+    jaccard = intersection / len(left.union(right))
+    containment = intersection / min(len(left), len(right))
+    return max(jaccard, containment)
+
+
+def is_similar_to_any_title(title: str, historical_titles: tuple[frozenset[str], ...]) -> bool:
+    tokens = title_tokens(title)
+    return is_similar_to_any_signature(tokens, historical_titles)
+
+
+def item_signature_tokens(item: ReportItem) -> frozenset[str]:
+    text = item.title if item.category == "academic" else f"{item.title} {item.summary}"
+    return title_tokens(text)
+
+
+def is_similar_to_any_signature(tokens: frozenset[str], signatures: tuple[frozenset[str], ...]) -> bool:
+    return any(title_similarity(tokens, previous) >= SIMILAR_TITLE_THRESHOLD for previous in signatures)
 
 
 def parse_args() -> argparse.Namespace:

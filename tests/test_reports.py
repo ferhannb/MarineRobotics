@@ -11,7 +11,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from maritime_autonomy_watch import config
-from maritime_autonomy_watch.daily import is_fresh_enough, select_daily_items
+from maritime_autonomy_watch.daily import is_fresh_enough, is_similar_to_any_title, select_daily_items, title_tokens
 from maritime_autonomy_watch.markdown import (
     clean_report_text,
     default_why_it_matters,
@@ -277,7 +277,7 @@ class ReportTests(unittest.TestCase):
 
         selected = select_daily_items(items)
 
-        self.assertEqual(len(selected), config.DAILY_MAX_ITEMS)
+        self.assertEqual(len(selected), config.DAILY_MAX_ITEMS_PER_CATEGORY)
         self.assertTrue(any(item.source == "Elsevier Scopus" for item in selected))
         self.assertGreaterEqual(
             relevance_score(
@@ -287,6 +287,75 @@ class ReportTests(unittest.TestCase):
             ),
             4.0,
         )
+
+    def test_daily_selection_balances_categories(self) -> None:
+        items = []
+        for category in ("academic", "industry", "defense"):
+            items.extend(
+                ReportItem(
+                    title=f"{category} maritime autonomy item {index}",
+                    url=f"https://example.com/{category}/{index}",
+                    source="OpenAlex" if category == "academic" else "Naval News",
+                    date="2026-05-06",
+                    category=category,
+                    relevance_score=9 - index * 0.01,
+                )
+                for index in range(12)
+            )
+
+        selected = select_daily_items(items, report_date=date(2026, 5, 7))
+        counts = {category: sum(1 for item in selected if item.category == category) for category in ("academic", "industry", "defense")}
+
+        self.assertEqual(len(selected), config.DAILY_MAX_ITEMS)
+        self.assertLessEqual(max(counts.values()), config.DAILY_MAX_ITEMS_PER_CATEGORY)
+        self.assertEqual(counts["academic"], config.DAILY_MAX_ITEMS_PER_CATEGORY)
+        self.assertEqual(counts["industry"], config.DAILY_MAX_ITEMS_PER_CATEGORY)
+        self.assertEqual(counts["defense"], config.DAILY_MAX_ITEMS_PER_CATEGORY)
+
+    def test_similar_recent_titles_are_excluded(self) -> None:
+        repeated = ReportItem(
+            title="Hybrid APF DQN framework for USV path planning",
+            url="https://example.com/repeated",
+            source="OpenAlex",
+            date="2026-05-06",
+            category="academic",
+            relevance_score=9,
+        )
+        similar = ReportItem(
+            title="A hybrid APF-DQN framework for USV path planning in dynamic ocean environments",
+            url="https://example.com/similar",
+            source="Elsevier Scopus",
+            date="2026-05-07",
+            category="academic",
+            relevance_score=10,
+        )
+        fresh = ReportItem(
+            title="New acoustic localization for cooperative AUV navigation",
+            url="https://example.com/fresh",
+            source="arXiv",
+            date="2026-05-07",
+            category="academic",
+            relevance_score=8,
+        )
+        old_report = DailyReport(
+            report_date=date(2026, 5, 6),
+            generated_at=datetime(2026, 5, 6, 9, 0),
+            items=(repeated,),
+            failed_sources=(),
+            source_statuses=(),
+            relevance_threshold=4.0,
+            deduplication_method="test",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            daily = root / "daily"
+            daily.mkdir()
+            (daily / "2026-05-06.md").write_text(render_daily_report(old_report), encoding="utf-8")
+
+            selected = select_daily_items([similar, fresh], reports_root=root, report_date=date(2026, 5, 7))
+
+        self.assertEqual([item.title for item in selected], ["New acoustic localization for cooperative AUV navigation"])
+        self.assertTrue(is_similar_to_any_title(similar.title, (title_tokens(repeated.title),)))
 
     def test_daily_selection_skips_recently_reported_items(self) -> None:
         repeated = ReportItem(
