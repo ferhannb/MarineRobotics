@@ -121,6 +121,8 @@ def select_daily_items(items, reports_root: Path | str = "reports", report_date:
             selected.append(candidate)
         elif selected:
             replace_index = lowest_ranked_index(selected, category=candidate.category)
+            if replace_index is None:
+                replace_index = lowest_ranked_index(selected)
             if replace_index is not None:
                 selected[replace_index] = candidate
         selected = sorted(selected, key=lambda item: novelty_score(item, report_date), reverse=True)
@@ -145,8 +147,12 @@ def balanced_daily_selection(candidates: list[ReportItem]) -> list[ReportItem]:
     return selected
 
 
-def lowest_ranked_index(items: list[ReportItem], category: str) -> int | None:
-    candidates = [(index, item) for index, item in enumerate(items) if item.category == category]
+def lowest_ranked_index(items: list[ReportItem], category: str | None = None) -> int | None:
+    candidates = [
+        (index, item)
+        for index, item in enumerate(items)
+        if category is None or item.category == category
+    ]
     if not candidates:
         return None
     index, _ = min(candidates, key=lambda pair: pair[1].relevance_score)
