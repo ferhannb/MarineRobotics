@@ -90,7 +90,7 @@ MARITIME_WATCH_RSS_FEEDS="https://example.com/feed.xml,https://example.org/rss"
 
 ## GitHub Actions
 
-`.github/workflows/daily_report.yml` runs every morning Amsterdam time and publishes the daily report as a GitHub Release. If the release already exists, the workflow updates its notes.
+`.github/workflows/daily_report.yml` runs every morning Amsterdam time, commits the daily report, and publishes it as a GitHub Release. If the release already exists, the workflow updates its notes.
 
 `.github/workflows/weekly_release.yml` runs Monday morning Amsterdam time, rebuilds the week from daily release notes, and publishes the weekly report as a GitHub Release. If the release already exists, the workflow updates its notes.
 

@@ -36,6 +36,17 @@ jobs:
         run: |
           python -m maritime_autonomy_watch.daily | tee daily-report-path.txt
 
+      - name: Commit daily report
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "maritime-autonomy-watch-bot"
+          git config user.email "maritime-autonomy-watch-bot@users.noreply.github.com"
+          git add reports/daily
+          git add reports/assets/daily || true
+          git commit -m "Add daily maritime autonomy report" || echo "No changes to commit"
+          git push
+
       - name: Publish daily release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
