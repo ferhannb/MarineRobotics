@@ -87,16 +87,17 @@ def generate_daily_report(report_date=None, reports_root: Path | str = "reports"
 
 
 def select_daily_items(items, reports_root: Path | str = "reports", report_date: date | None = None) -> list:
+    if report_date is None:
+        report_date = datetime.now(ZoneInfo(DEFAULT_TIMEZONE)).date()
+
     candidates = [
-        polish_item(item)
+        enrich_item(item, report_date)
         for item in deduplicate_items(items)
         if item.relevance_score >= NOVEL_UNIQUE_RELEVANCE_FLOOR
         and item.title
         and item.url
         and is_fresh_enough(item, report_date)
     ]
-    if report_date is None:
-        report_date = datetime.now(ZoneInfo(DEFAULT_TIMEZONE)).date()
 
     history = historical_items(
         recent_daily_paths(Path(reports_root) / "daily", report_date, DAILY_HISTORY_LOOKBACK_DAYS)
@@ -139,7 +140,9 @@ def balanced_daily_selection(candidates: list[ReportItem]) -> list[ReportItem]:
             break
         if category_counts[item.category] >= DAILY_MAX_ITEMS_PER_CATEGORY:
             continue
-        if is_similar_to_any_signature(item_signature_tokens(item), tuple(selected_signatures)):
+        similar_index = similar_item_index(item_signature_tokens(item), tuple(selected_signatures))
+        if similar_index is not None:
+            selected[similar_index] = merge_also_reported_by(selected[similar_index], item)
             continue
         selected.append(item)
         selected_signatures.append(item_signature_tokens(item))
@@ -161,6 +164,10 @@ def lowest_ranked_index(items: list[ReportItem], category: str | None = None) ->
 
 def novelty_score(item: ReportItem, report_date: date) -> float:
     score = item.relevance_score
+    if "missing-summary" in item.quality_flags:
+        score -= 1.5
+    if "date-anomaly" in item.quality_flags:
+        score -= 1.0
     item_date = parse_item_date(item.date)
     if item_date is None:
         return score
@@ -173,19 +180,28 @@ def novelty_score(item: ReportItem, report_date: date) -> float:
     return round(score, 3)
 
 
-def polish_item(item: ReportItem) -> ReportItem:
+def enrich_item(item: ReportItem, report_date: date | None = None) -> ReportItem:
     summary = clean_report_text(item.summary)
     abstract = clean_report_text(item.abstract)
-    why_it_matters = clean_report_text(item.why_it_matters) or default_why_it_matters(
-        replace(item, summary=summary, abstract=abstract)
+    base = replace(item, title=clean_report_text(item.title), summary=summary, abstract=abstract)
+    topic_tags = topic_tags_for_item(base)
+    quality_flags = quality_flags_for_item(base, report_date)
+    signal = signal_for_item(base, topic_tags)
+    enriched = replace(
+        base,
+        signal=signal,
+        quality_flags=quality_flags,
+        topic_tags=topic_tags,
     )
+    why_it_matters = clean_report_text(item.why_it_matters) or default_why_it_matters(enriched)
     return replace(
-        item,
-        title=clean_report_text(item.title),
-        summary=summary,
-        abstract=abstract,
+        enriched,
         why_it_matters=why_it_matters,
     )
+
+
+def polish_item(item: ReportItem) -> ReportItem:
+    return enrich_item(item)
 
 
 def is_fresh_enough(item: ReportItem, report_date: date | None) -> bool:
@@ -272,6 +288,63 @@ def item_signature_tokens(item: ReportItem) -> frozenset[str]:
 
 def is_similar_to_any_signature(tokens: frozenset[str], signatures: tuple[frozenset[str], ...]) -> bool:
     return any(title_similarity(tokens, previous) >= SIMILAR_TITLE_THRESHOLD for previous in signatures)
+
+
+def similar_item_index(tokens: frozenset[str], signatures: tuple[frozenset[str], ...]) -> int | None:
+    for index, previous in enumerate(signatures):
+        if title_similarity(tokens, previous) >= SIMILAR_TITLE_THRESHOLD:
+            return index
+    return None
+
+
+def merge_also_reported_by(existing: ReportItem, duplicate: ReportItem) -> ReportItem:
+    sources = [source for source in existing.also_reported_by if source]
+    duplicate_source = duplicate.source
+    if duplicate_source and duplicate_source != existing.source and duplicate_source not in sources:
+        sources.append(duplicate_source)
+    return replace(existing, also_reported_by=tuple(sources))
+
+
+def topic_tags_for_item(item: ReportItem) -> tuple[str, ...]:
+    text = f"{item.title} {item.summary} {item.abstract}".lower()
+    tags: list[str] = []
+    topic_rules = (
+        ("AUV navigation", ("auv", "autonomous underwater", "underwater navigation")),
+        ("USV operations", ("usv", "unmanned surface", "surface vessel", "asv")),
+        ("underwater communications", ("acoustic", "modem", "channel access", "underwater network")),
+        ("swarm autonomy", ("swarm", "formation", "cooperative", "multi-agent")),
+        ("perception", ("perception", "camera", "visual", "sonar", "sensing")),
+        ("planning/control", ("path planning", "trajectory", "control", "station keeping")),
+        ("critical infrastructure", ("inspection", "pipeline", "cable", "infrastructure", "subsea")),
+        ("defense adoption", ("naval", "navy", "defense", "warship", "drone boat")),
+        ("regulation/legal", ("legal", "law", "unclos", "regulatory")),
+    )
+    for tag, needles in topic_rules:
+        if any(needle in text for needle in needles):
+            tags.append(tag)
+    return tuple(dict.fromkeys(tags) or ["general autonomy"])
+
+
+def quality_flags_for_item(item: ReportItem, report_date: date | None) -> tuple[str, ...]:
+    flags: list[str] = []
+    body = clean_report_text(item.abstract or item.summary)
+    if not body or body.lower() == "no summary available.":
+        flags.append("missing-summary")
+    item_date = parse_item_date(item.date)
+    if report_date is not None and item_date is not None and item_date > report_date:
+        flags.append("date-anomaly")
+    if item.relevance_score < RELEVANCE_THRESHOLD:
+        flags.append("low-score-unique")
+    return tuple(flags)
+
+
+def signal_for_item(item: ReportItem, topic_tags: tuple[str, ...]) -> str:
+    primary = topic_tags[0] if topic_tags else "maritime autonomy"
+    if item.category == "academic":
+        return f"Research signal: {primary}"
+    if item.category == "defense":
+        return f"Defense signal: {primary}"
+    return f"Industry signal: {primary}"
 
 
 def parse_args() -> argparse.Namespace:

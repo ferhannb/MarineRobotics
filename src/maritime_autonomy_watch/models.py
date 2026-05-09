@@ -17,6 +17,10 @@ class ReportItem:
     authors: tuple[str, ...] = field(default_factory=tuple)
     doi: str = ""
     abstract: str = ""
+    signal: str = ""
+    quality_flags: tuple[str, ...] = field(default_factory=tuple)
+    topic_tags: tuple[str, ...] = field(default_factory=tuple)
+    also_reported_by: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

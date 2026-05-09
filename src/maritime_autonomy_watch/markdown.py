@@ -42,6 +42,8 @@ SIGNAL_STOPWORDS = {
 def render_daily_report(report: DailyReport, repository: str = "ferhannb/MarineRobotics") -> str:
     counts = Counter(item.category for item in report.items)
     freshest, oldest = freshness_bounds(report.items)
+    topic_counts = topic_tag_counts(report.items)
+    quality_counts = quality_flag_counts(report.items)
     asset_name = f"{report.report_date.isoformat()}-category-snapshot.svg"
     asset_url = (
         f"https://github.com/{repository}/releases/download/"
@@ -58,10 +60,48 @@ def render_daily_report(report: DailyReport, repository: str = "ferhannb/MarineR
         f"- Defense/naval autonomy news: {counts['defense']}",
         f"- Failed/inaccessible sources: {len(report.failed_sources)}",
         "",
-        "## Top Signals Today",
+        "## Contents",
+        "",
+        "- [Analyst Brief](#analyst-brief)",
+        "- [Must Read](#must-read)",
+        "- [Top Signals Today](#top-signals-today)",
+        "- [Topic Signals](#topic-signals)",
+        "- [Freshness and Coverage](#freshness-and-coverage)",
+        "- [Quality Notes](#quality-notes)",
+        "- [Watchlist](#watchlist)",
+        "- [Academic Papers](#academic-papers)",
+        "- [Industry and Company News](#industry-and-company-news)",
+        "- [Defense and Naval Autonomy News](#defense-and-naval-autonomy-news)",
+        "- [Source Status Summary](#source-status-summary)",
+        "",
+        "## Analyst Brief",
         "",
     ]
+    lines.extend(analyst_brief(report))
+    lines.extend(
+        [
+            "",
+            "## Must Read",
+            "",
+        ]
+    )
+    lines.extend(render_must_read(report.items))
+    lines.extend(
+        [
+            "",
+        "## Top Signals Today",
+        "",
+        ]
+    )
     lines.extend(main_signals(list(report.items)))
+    lines.extend(
+        [
+            "",
+            "## Topic Signals",
+            "",
+        ]
+    )
+    lines.extend(render_topic_signals(topic_counts))
     lines.extend(
         [
             "",
@@ -71,6 +111,7 @@ def render_daily_report(report: DailyReport, repository: str = "ferhannb/MarineR
             f"- Oldest selected item date: {oldest or 'Unknown'}",
             f"- Active/enabled sources: {enabled_source_count(report.source_statuses)}",
             f"- Sources with access problems: {source_problem_count(report.source_statuses)}",
+            f"- Quality flags: {sum(quality_counts.values())}",
             "",
             "```mermaid",
             "pie showData",
@@ -80,6 +121,22 @@ def render_daily_report(report: DailyReport, repository: str = "ferhannb/MarineR
             "```",
             "",
             f"![Daily category snapshot]({asset_url})",
+            "",
+            "## Quality Notes",
+            "",
+        ]
+    )
+    lines.extend(render_quality_notes(report.items, quality_counts))
+    lines.extend(
+        [
+            "",
+            "## Watchlist",
+            "",
+        ]
+    )
+    lines.extend(render_watchlist(report.items))
+    lines.extend(
+        [
             "",
         ]
     )
@@ -92,15 +149,6 @@ def render_daily_report(report: DailyReport, repository: str = "ferhannb/MarineR
             f"| Academic papers | {counts['academic']} |",
             f"| Industry/company news | {counts['industry']} |",
             f"| Defense/naval autonomy news | {counts['defense']} |",
-            "",
-            "## Contents",
-            "",
-            "- [Top Signals Today](#top-signals-today)",
-            "- [Freshness and Coverage](#freshness-and-coverage)",
-            "- [Academic Papers](#academic-papers)",
-            "- [Industry and Company News](#industry-and-company-news)",
-            "- [Defense and Naval Autonomy News](#defense-and-naval-autonomy-news)",
-            "- [Source Status Summary](#source-status-summary)",
             "",
         ]
     )
@@ -236,6 +284,14 @@ def render_item(item: ReportItem) -> list[str]:
         lines.append(f"- Authors: {', '.join(item.authors)}")
     if item.doi:
         lines.append(f"- DOI: {item.doi}")
+    if item.signal:
+        lines.append(f"- Signal: {item.signal}")
+    if item.topic_tags:
+        lines.append(f"- Topic tags: {', '.join(item.topic_tags)}")
+    if item.quality_flags:
+        lines.append(f"- Quality flags: {', '.join(item.quality_flags)}")
+    if item.also_reported_by:
+        lines.append(f"- Also reported by: {', '.join(item.also_reported_by)}")
 
     abstract_title = "Abstract" if item.category == "academic" else "Summary"
     abstract_text = item.abstract or item.summary or "No summary available."
@@ -327,6 +383,9 @@ def default_why_it_matters(item: ReportItem) -> str:
 def main_signals(items: list[ReportItem]) -> list[str]:
     if not items:
         return ["- No high-relevance maritime autonomy items were selected."]
+    tags = topic_tag_counts(tuple(items))
+    if tags:
+        return [f"- {tag}: {count} selected item(s)." for tag, count in tags.most_common(5)]
     words: Counter[str] = Counter()
     for item in items:
         for word in re.findall(r"[A-Za-z][A-Za-z-]{3,}", f"{item.title} {item.summary} {item.abstract}"):
@@ -337,6 +396,87 @@ def main_signals(items: list[ReportItem]) -> list[str]:
     if not signals:
         return ["- Maritime autonomy activity remained broad across research, industry, and defense sources."]
     return [f"- Repeated signal around {word} across selected items." for word in signals]
+
+
+def analyst_brief(report: DailyReport) -> list[str]:
+    if not report.items:
+        return ["No selected maritime autonomy items cleared the filters today."]
+    tags = topic_tag_counts(report.items)
+    counts = Counter(item.category for item in report.items)
+    quality_counts = quality_flag_counts(report.items)
+    top_tags = ", ".join(tag for tag, _ in tags.most_common(3)) or "broad maritime autonomy"
+    strongest = max(report.items, key=lambda item: item.relevance_score)
+    lines = [
+        (
+            f"Today's report selected {len(report.items)} non-duplicate item(s), led by {top_tags}. "
+            f"The strongest item is [{strongest.title}]({strongest.url}) from {display_source(strongest.source)}."
+        ),
+        (
+            f"Coverage is weighted toward academic research ({counts['academic']}), with "
+            f"{counts['industry']} industry and {counts['defense']} defense signal(s)."
+        ),
+    ]
+    if quality_counts:
+        lines.append(
+            "Quality caveat: "
+            + ", ".join(f"{flag}={count}" for flag, count in quality_counts.most_common())
+            + "."
+        )
+    return lines
+
+
+def render_must_read(items: tuple[ReportItem, ...]) -> list[str]:
+    candidates = [
+        item
+        for item in sorted(items, key=lambda candidate: candidate.relevance_score, reverse=True)
+        if "missing-summary" not in item.quality_flags
+    ][:5]
+    if not candidates:
+        return ["- No must-read items with sufficient summary quality today."]
+    return [f"- [{item.title}]({item.url}) — {item.signal or default_why_it_matters(item)}" for item in candidates]
+
+
+def render_topic_signals(topic_counts: Counter[str]) -> list[str]:
+    if not topic_counts:
+        return ["- No topic tags were detected."]
+    return [f"- {tag}: {count}" for tag, count in topic_counts.most_common(8)]
+
+
+def render_quality_notes(items: tuple[ReportItem, ...], quality_counts: Counter[str]) -> list[str]:
+    if not quality_counts:
+        return ["- No quality flags on selected items."]
+    lines = [f"- {flag}: {count}" for flag, count in quality_counts.most_common()]
+    date_anomalies = [item for item in items if "date-anomaly" in item.quality_flags]
+    if date_anomalies:
+        lines.append(
+            "- Date anomalies: "
+            + "; ".join(f"[{item.title}]({item.url}) reports {item.date}" for item in date_anomalies[:5])
+        )
+    return lines
+
+
+def render_watchlist(items: tuple[ReportItem, ...]) -> list[str]:
+    watchlist = [item for item in items if item.quality_flags][:5]
+    if not watchlist:
+        return ["- No watchlist items today."]
+    return [
+        f"- [{item.title}]({item.url}) — {', '.join(item.quality_flags)}"
+        for item in watchlist
+    ]
+
+
+def topic_tag_counts(items: tuple[ReportItem, ...]) -> Counter[str]:
+    counts: Counter[str] = Counter()
+    for item in items:
+        counts.update(item.topic_tags)
+    return counts
+
+
+def quality_flag_counts(items: tuple[ReportItem, ...]) -> Counter[str]:
+    counts: Counter[str] = Counter()
+    for item in items:
+        counts.update(item.quality_flags)
+    return counts
 
 
 def clean_report_text(text: str) -> str:
@@ -404,6 +544,9 @@ def parse_daily_items(markdown: str) -> list[ReportItem]:
             body = match.group("body").strip()
             meta = parse_meta(body)
             authors = tuple(part.strip() for part in meta.get("Authors", "").split(",") if part.strip())
+            topic_tags = tuple(part.strip() for part in meta.get("Topic tags", "").split(",") if part.strip())
+            quality_flags = tuple(part.strip() for part in meta.get("Quality flags", "").split(",") if part.strip())
+            also_reported_by = tuple(part.strip() for part in meta.get("Also reported by", "").split(",") if part.strip())
             summary = extract_item_subsection(body, "Abstract") or extract_item_subsection(body, "Summary")
             why_it_matters = extract_item_subsection(body, "Why it matters")
             items.append(
@@ -419,6 +562,10 @@ def parse_daily_items(markdown: str) -> list[ReportItem]:
                     why_it_matters=why_it_matters,
                     authors=authors,
                     doi=meta.get("DOI", ""),
+                    signal=meta.get("Signal", ""),
+                    topic_tags=topic_tags,
+                    quality_flags=quality_flags,
+                    also_reported_by=also_reported_by,
                 )
             )
     return items

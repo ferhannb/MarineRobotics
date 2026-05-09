@@ -108,8 +108,13 @@ class ReportTests(unittest.TestCase):
             deduplication_method="test",
         )
         markdown = render_daily_report(report)
+        self.assertIn("## Analyst Brief", markdown)
+        self.assertIn("## Must Read", markdown)
         self.assertIn("## Top Signals Today", markdown)
+        self.assertIn("## Topic Signals", markdown)
         self.assertIn("## Freshness and Coverage", markdown)
+        self.assertIn("## Quality Notes", markdown)
+        self.assertIn("## Watchlist", markdown)
         self.assertIn("```mermaid", markdown)
         self.assertIn(
             "https://github.com/ferhannb/MarineRobotics/releases/download/daily-2026-05-05/2026-05-05-category-snapshot.svg",
@@ -120,6 +125,39 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(parsed[0].title, item.title)
         self.assertEqual(parsed[0].category, "academic")
         self.assertEqual(parsed[0].doi, "10.123/example")
+
+    def test_daily_render_and_parse_quality_metadata(self) -> None:
+        item = ReportItem(
+            title="Future dated USV paper",
+            url="https://example.com/future",
+            source="Elsevier Scopus",
+            date="2026-12-01",
+            category="academic",
+            relevance_score=4.25,
+            abstract="",
+            signal="Research signal: USV operations",
+            quality_flags=("missing-summary", "date-anomaly"),
+            topic_tags=("USV operations", "planning/control"),
+            also_reported_by=("OpenAlex",),
+        )
+        report = DailyReport(
+            report_date=date(2026, 5, 5),
+            generated_at=datetime(2026, 5, 5, 9, 0),
+            items=(item,),
+            failed_sources=(),
+            source_statuses=(),
+            relevance_threshold=4.0,
+            deduplication_method="test",
+        )
+
+        markdown = render_daily_report(report)
+        parsed = parse_daily_items(markdown)
+
+        self.assertIn("- Quality flags: missing-summary, date-anomaly", markdown)
+        self.assertIn("- Also reported by: OpenAlex", markdown)
+        self.assertEqual(parsed[0].quality_flags, item.quality_flags)
+        self.assertEqual(parsed[0].topic_tags, item.topic_tags)
+        self.assertEqual(parsed[0].also_reported_by, item.also_reported_by)
 
     def test_clean_report_text_removes_rss_boilerplate_and_spacing_glitches(self) -> None:
         cleaned = clean_report_text(
@@ -207,6 +245,9 @@ class ReportTests(unittest.TestCase):
         self.assertIn("Industry/company news", svg)
         self.assertIn("Defense/naval autonomy news", svg)
         self.assertIn("3 selected items", svg)
+        self.assertIn("Daily intelligence dashboard", svg)
+        self.assertIn("Enabled sources", svg)
+        self.assertIn("Quality flags", svg)
 
     def test_generate_daily_report_writes_markdown_and_svg(self) -> None:
         from maritime_autonomy_watch.daily import generate_daily_report
@@ -228,6 +269,30 @@ class ReportTests(unittest.TestCase):
 
             self.assertTrue(output.is_file())
             self.assertTrue(daily_asset_path(date(2026, 5, 5), root).is_file())
+
+    def test_generate_daily_report_enriches_items_with_topics_and_quality_flags(self) -> None:
+        from maritime_autonomy_watch.daily import generate_daily_report
+
+        item = ReportItem(
+            title="Digital twin-driven swarm of autonomous underwater vehicles for marine exploration",
+            url="https://example.com/paper",
+            source="Elsevier Scopus",
+            date="2026-12-01",
+            category="academic",
+            relevance_score=4.25,
+            abstract="",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch("maritime_autonomy_watch.daily.collect_items") as collect_items:
+                collect_items.return_value = ([item], [], [SourceStatus("Elsevier Scopus", "enabled", "API source")])
+                output = generate_daily_report(report_date=date(2026, 5, 5), reports_root=root)
+
+            markdown = output.read_text(encoding="utf-8")
+
+        self.assertIn("missing-summary", markdown)
+        self.assertIn("date-anomaly", markdown)
+        self.assertIn("swarm autonomy", markdown)
 
     def test_daily_paths_for_week(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
