@@ -321,3 +321,47 @@ This feature is complete when:
 - The release uses the weekly report as release notes.
 - The workflow does not crash if the release already exists.
 - The README explains the daily report and weekly release archive system.
+
+## Python 
+my python environment is at the /home/ferhannb/CALISMALAR/.venv/bin/python
+
+---
+
+## Daily Report Quality V2
+
+Daily reports should be more useful as intelligence snapshots, not only item logs.
+
+The daily report should keep the existing item structure so weekly report parsing remains compatible, but it should add:
+
+- Top Signals Today before the detailed item sections.
+- Freshness and Coverage with newest/oldest selected item dates, source health, and source access problems.
+- A Mermaid pie chart showing selected item distribution across academic, industry, and defense categories.
+- A generated SVG category snapshot saved under:
+
+```text
+reports/assets/daily/YYYY-MM-DD-category-snapshot.svg
+```
+
+The daily release notes should embed the generated SVG from the release asset URL:
+
+```text
+https://github.com/ferhannb/MarineRobotics/releases/download/daily-YYYY-MM-DD/YYYY-MM-DD-category-snapshot.svg
+```
+
+The daily GitHub Actions workflow should upload that SVG to the matching daily release with `gh release upload --clobber`.
+
+Content quality rules:
+
+- Remove RSS/news boilerplate such as `The post ... appeared first on ...`.
+- Normalize spacing and punctuation problems in summaries and abstracts.
+- Shorten very long abstracts or summaries to readable excerpts.
+- Generate stronger rule-based `Why it matters` text using detected maritime-autonomy topics such as AUV, USV, swarm, obstacle avoidance, trajectory planning, critical infrastructure monitoring, and naval adoption.
+- Exclude stale news older than 45 days unless relevance score is at least 8.
+- Exclude stale academic items older than 180 days unless relevance score is at least 8.
+
+This feature is complete when:
+
+- Daily reports render the new signal, freshness, Mermaid, and SVG sections.
+- Daily release workflow uploads the generated SVG snapshot.
+- Weekly parsing still works with the redesigned daily report.
+- Unit tests cover text cleanup, freshness filtering, domain-specific `Why it matters`, Mermaid rendering, SVG generation, and weekly compatibility.

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from .models import DailyReport, FailedSource, ReportItem, SourceStatus
 
@@ -15,9 +15,38 @@ SECTION_TITLES = {
     "defense": "Defense and Naval Autonomy News",
 }
 
+SIGNAL_STOPWORDS = {
+    "about",
+    "across",
+    "after",
+    "also",
+    "and",
+    "autonomy",
+    "from",
+    "into",
+    "marine",
+    "maritime",
+    "news",
+    "paper",
+    "post",
+    "report",
+    "says",
+    "selected",
+    "that",
+    "the",
+    "this",
+    "with",
+}
 
-def render_daily_report(report: DailyReport, repository: str = "MarineRobotics") -> str:
+
+def render_daily_report(report: DailyReport, repository: str = "ferhannb/MarineRobotics") -> str:
     counts = Counter(item.category for item in report.items)
+    freshest, oldest = freshness_bounds(report.items)
+    asset_name = f"{report.report_date.isoformat()}-category-snapshot.svg"
+    asset_url = (
+        f"https://github.com/{repository}/releases/download/"
+        f"daily-{report.report_date.isoformat()}/{quote(asset_name)}"
+    )
     lines: list[str] = [
         f"# Maritime Autonomy Watch — {report.report_date.isoformat()}",
         "",
@@ -29,22 +58,52 @@ def render_daily_report(report: DailyReport, repository: str = "MarineRobotics")
         f"- Defense/naval autonomy news: {counts['defense']}",
         f"- Failed/inaccessible sources: {len(report.failed_sources)}",
         "",
-        "### Category Snapshot",
-        "",
-        "| Category | Selected items |",
-        "|---|---:|",
-        f"| Academic papers | {counts['academic']} |",
-        f"| Industry/company news | {counts['industry']} |",
-        f"| Defense/naval autonomy news | {counts['defense']} |",
-        "",
-        "## Contents",
-        "",
-        "- [Academic Papers](#academic-papers)",
-        "- [Industry and Company News](#industry-and-company-news)",
-        "- [Defense and Naval Autonomy News](#defense-and-naval-autonomy-news)",
-        "- [Source Status Summary](#source-status-summary)",
+        "## Top Signals Today",
         "",
     ]
+    lines.extend(main_signals(list(report.items)))
+    lines.extend(
+        [
+            "",
+            "## Freshness and Coverage",
+            "",
+            f"- Newest selected item date: {freshest or 'Unknown'}",
+            f"- Oldest selected item date: {oldest or 'Unknown'}",
+            f"- Active/enabled sources: {enabled_source_count(report.source_statuses)}",
+            f"- Sources with access problems: {source_problem_count(report.source_statuses)}",
+            "",
+            "```mermaid",
+            "pie showData",
+            f'    "Academic papers" : {counts["academic"]}',
+            f'    "Industry/company news" : {counts["industry"]}',
+            f'    "Defense/naval autonomy news" : {counts["defense"]}',
+            "```",
+            "",
+            f"![Daily category snapshot]({asset_url})",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "### Category Snapshot",
+            "",
+            "| Category | Selected items |",
+            "|---|---:|",
+            f"| Academic papers | {counts['academic']} |",
+            f"| Industry/company news | {counts['industry']} |",
+            f"| Defense/naval autonomy news | {counts['defense']} |",
+            "",
+            "## Contents",
+            "",
+            "- [Top Signals Today](#top-signals-today)",
+            "- [Freshness and Coverage](#freshness-and-coverage)",
+            "- [Academic Papers](#academic-papers)",
+            "- [Industry and Company News](#industry-and-company-news)",
+            "- [Defense and Naval Autonomy News](#defense-and-naval-autonomy-news)",
+            "- [Source Status Summary](#source-status-summary)",
+            "",
+        ]
+    )
 
     for category, title in SECTION_TITLES.items():
         lines.extend([f"## {title}", ""])
@@ -180,6 +239,10 @@ def render_item(item: ReportItem) -> list[str]:
 
     abstract_title = "Abstract" if item.category == "academic" else "Summary"
     abstract_text = item.abstract or item.summary or "No summary available."
+    abstract_text = concise_excerpt(
+        clean_report_text(abstract_text),
+        max_chars=950 if item.category == "academic" else 520,
+    )
     lines.extend(
         [
             "",
@@ -189,7 +252,7 @@ def render_item(item: ReportItem) -> list[str]:
             "",
             "**Why it matters**",
             "",
-            item.why_it_matters.strip() or default_why_it_matters(item),
+            clean_report_text(item.why_it_matters) or default_why_it_matters(item),
             "",
             "---",
             "",
@@ -230,6 +293,30 @@ def render_source_statuses(source_statuses: tuple[SourceStatus, ...]) -> list[st
 
 
 def default_why_it_matters(item: ReportItem) -> str:
+    text = f"{item.title} {item.summary} {item.abstract}".lower()
+    topics = []
+    if re.search(r"\bauvs?\b|autonomous underwater|underwater", text):
+        topics.append("underwater autonomy")
+    if re.search(r"\busvs?\b|unmanned surface|surface vessel", text):
+        topics.append("surface-vessel operations")
+    if "swarm" in text or "formation" in text:
+        topics.append("multi-vehicle coordination")
+    if "obstacle avoidance" in text or "collision" in text:
+        topics.append("navigation safety")
+    if "path planning" in text or "trajectory" in text or "route planning" in text:
+        topics.append("planning and control")
+    if "critical infrastructure" in text or "inspection" in text or "monitoring" in text:
+        topics.append("infrastructure monitoring")
+    if "naval" in text or "navy" in text or "defense" in text or "defence" in text:
+        topics.append("naval adoption")
+
+    if topics:
+        topic_text = ", ".join(list(dict.fromkeys(topics))[:3])
+        if item.category == "academic":
+            return f"Relevant to {topic_text}; the work may inform maritime autonomy research, testing priorities, or system design."
+        if item.category == "defense":
+            return f"Signals movement in {topic_text}; useful for tracking operational concepts, procurement direction, and fleet integration."
+        return f"Signals momentum in {topic_text}; useful for tracking product direction, partnerships, and deployment opportunities."
     if item.category == "academic":
         return "This paper may influence autonomy, perception, planning, or control work for maritime robotic systems."
     if item.category == "defense":
@@ -239,17 +326,59 @@ def default_why_it_matters(item: ReportItem) -> str:
 
 def main_signals(items: list[ReportItem]) -> list[str]:
     if not items:
-        return ["- No high-relevance items were selected this week."]
+        return ["- No high-relevance maritime autonomy items were selected."]
     words: Counter[str] = Counter()
     for item in items:
-        for word in re.findall(r"[A-Za-z][A-Za-z-]{3,}", f"{item.title} {item.summary}"):
+        for word in re.findall(r"[A-Za-z][A-Za-z-]{3,}", f"{item.title} {item.summary} {item.abstract}"):
             lowered = word.lower()
-            if lowered not in {"with", "from", "this", "that", "autonomy", "maritime"}:
+            if lowered not in SIGNAL_STOPWORDS:
                 words[lowered] += 1
     signals = [word for word, _ in words.most_common(3)]
     if not signals:
         return ["- Maritime autonomy activity remained broad across research, industry, and defense sources."]
     return [f"- Repeated signal around {word} across selected items." for word in signals]
+
+
+def clean_report_text(text: str) -> str:
+    if not text:
+        return ""
+    cleaned = text.replace("\xa0", " ")
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    cleaned = re.sub(r"\s+([,.;:!?])", r"\1", cleaned)
+    cleaned = re.sub(r"(?<=[a-z0-9])\.(?=[A-Z])", ". ", cleaned)
+    cleaned = re.sub(r"\s*\.\.\.\s*The post .+? appeared first on .+?\.?$", ".", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s*The post .+? appeared first on .+?\.?$", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s*\.\.\.$", ".", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
+
+def concise_excerpt(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    candidate = text[:max_chars].rstrip()
+    sentence_end = max(candidate.rfind("."), candidate.rfind("!"), candidate.rfind("?"))
+    if sentence_end >= max_chars * 0.55:
+        return candidate[: sentence_end + 1]
+    word_end = candidate.rfind(" ")
+    if word_end > 0:
+        candidate = candidate[:word_end]
+    return f"{candidate.rstrip()}..."
+
+
+def freshness_bounds(items: tuple[ReportItem, ...]) -> tuple[str, str]:
+    dates = sorted(item.date for item in items if item.date)
+    if not dates:
+        return "", ""
+    return dates[-1], dates[0]
+
+
+def enabled_source_count(source_statuses: tuple[SourceStatus, ...]) -> int:
+    return sum(1 for status in source_statuses if status.status == "enabled")
+
+
+def source_problem_count(source_statuses: tuple[SourceStatus, ...]) -> int:
+    return sum(1 for status in source_statuses if status.status in {"failed", "partial", "disabled"})
 
 
 ITEM_RE = re.compile(

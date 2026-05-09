@@ -6,14 +6,21 @@ import tempfile
 import unittest
 from datetime import date, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from maritime_autonomy_watch import config
-from maritime_autonomy_watch.markdown import parse_daily_items, render_daily_report
+from maritime_autonomy_watch.daily import is_fresh_enough, select_daily_items
+from maritime_autonomy_watch.markdown import (
+    clean_report_text,
+    default_why_it_matters,
+    parse_daily_items,
+    render_daily_report,
+)
 from maritime_autonomy_watch.models import DailyReport, ReportItem, SourceStatus
-from maritime_autonomy_watch.daily import select_daily_items
 from maritime_autonomy_watch.sources import parse_masg_news
+from maritime_autonomy_watch.visuals import daily_asset_path, render_category_snapshot_svg
 from maritime_autonomy_watch.weekly import (
     daily_paths_for_week,
     generate_weekly_report,
@@ -75,11 +82,126 @@ class ReportTests(unittest.TestCase):
             deduplication_method="test",
         )
         markdown = render_daily_report(report)
+        self.assertIn("## Top Signals Today", markdown)
+        self.assertIn("## Freshness and Coverage", markdown)
+        self.assertIn("```mermaid", markdown)
+        self.assertIn(
+            "https://github.com/ferhannb/MarineRobotics/releases/download/daily-2026-05-05/2026-05-05-category-snapshot.svg",
+            markdown,
+        )
         parsed = parse_daily_items(markdown)
         self.assertEqual(len(parsed), 1)
         self.assertEqual(parsed[0].title, item.title)
         self.assertEqual(parsed[0].category, "academic")
         self.assertEqual(parsed[0].doi, "10.123/example")
+
+    def test_clean_report_text_removes_rss_boilerplate_and_spacing_glitches(self) -> None:
+        cleaned = clean_report_text(
+            "MBARI deployed an AUV under ice... The post Compact Autonomous Robot appeared first on Ocean Science & Technology ."
+        )
+        self.assertEqual(cleaned, "MBARI deployed an AUV under ice.")
+
+        self.assertEqual(
+            clean_report_text("The underwater drone.Including AUV sensors , navigation ."),
+            "The underwater drone. Including AUV sensors, navigation.",
+        )
+
+    def test_freshness_filter_excludes_stale_items_except_high_relevance(self) -> None:
+        stale_news = ReportItem(
+            title="Old autonomous vessel partnership",
+            url="https://example.com/old-news",
+            source="Example News",
+            date="2025-11-01",
+            category="industry",
+            relevance_score=7.5,
+        )
+        high_relevance_stale_news = ReportItem(
+            title="Strategic USV critical infrastructure contract",
+            url="https://example.com/high-news",
+            source="Example News",
+            date="2025-11-01",
+            category="industry",
+            relevance_score=8.0,
+        )
+        stale_academic = ReportItem(
+            title="Old AUV navigation paper",
+            url="https://example.com/old-paper",
+            source="OpenAlex",
+            date="2025-01-01",
+            category="academic",
+            relevance_score=7.5,
+        )
+
+        self.assertFalse(is_fresh_enough(stale_news, date(2026, 5, 7)))
+        self.assertTrue(is_fresh_enough(high_relevance_stale_news, date(2026, 5, 7)))
+        self.assertFalse(is_fresh_enough(stale_academic, date(2026, 5, 7)))
+
+        selected = select_daily_items(
+            [stale_news, high_relevance_stale_news, stale_academic],
+            report_date=date(2026, 5, 7),
+        )
+        self.assertEqual([item.title for item in selected], ["Strategic USV critical infrastructure contract"])
+
+    def test_domain_specific_why_it_matters(self) -> None:
+        item = ReportItem(
+            title="USV swarm obstacle avoidance for naval harbor defense",
+            url="https://example.com/item",
+            source="Naval News",
+            date="2026-05-07",
+            category="defense",
+            relevance_score=9,
+            summary="The system coordinates unmanned surface vessels for collision avoidance.",
+        )
+
+        why = default_why_it_matters(item)
+
+        self.assertIn("surface-vessel operations", why)
+        self.assertIn("multi-vehicle coordination", why)
+        self.assertIn("operational concepts", why)
+
+    def test_category_snapshot_svg_contains_counts(self) -> None:
+        report = DailyReport(
+            report_date=date(2026, 5, 5),
+            generated_at=datetime(2026, 5, 5, 9, 0),
+            items=(
+                ReportItem("AUV paper", "https://example.com/a", "OpenAlex", "2026-05-05", "academic", 8),
+                ReportItem("USV contract", "https://example.com/b", "News", "2026-05-05", "industry", 7),
+                ReportItem("Naval UUV trial", "https://example.com/c", "Naval News", "2026-05-05", "defense", 7),
+            ),
+            failed_sources=(),
+            source_statuses=(),
+            relevance_threshold=4.0,
+            deduplication_method="test",
+        )
+
+        svg = render_category_snapshot_svg(report)
+
+        self.assertIn("<svg", svg)
+        self.assertIn("Academic papers", svg)
+        self.assertIn("Industry/company news", svg)
+        self.assertIn("Defense/naval autonomy news", svg)
+        self.assertIn("3 selected items", svg)
+
+    def test_generate_daily_report_writes_markdown_and_svg(self) -> None:
+        from maritime_autonomy_watch.daily import generate_daily_report
+
+        item = ReportItem(
+            title="AUV obstacle avoidance paper",
+            url="https://example.com/paper",
+            source="OpenAlex",
+            date="2026-05-05",
+            category="academic",
+            relevance_score=8,
+            abstract="AUV obstacle avoidance research.",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch("maritime_autonomy_watch.daily.collect_items") as collect_items:
+                collect_items.return_value = ([item], [], [SourceStatus("OpenAlex", "enabled", "API source")])
+                output = generate_daily_report(report_date=date(2026, 5, 5), reports_root=root)
+
+            self.assertTrue(output.is_file())
+            self.assertTrue(daily_asset_path(date(2026, 5, 5), root).is_file())
 
     def test_daily_paths_for_week(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

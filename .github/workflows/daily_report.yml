@@ -54,3 +54,8 @@ jobs:
               --title "$REPORT_TITLE" \
               --notes-file "$REPORT_FILE"
           fi
+
+          SNAPSHOT_FILE="reports/assets/daily/$REPORT_DATE-category-snapshot.svg"
+          if [ -f "$SNAPSHOT_FILE" ]; then
+            gh release upload "$REPORT_TAG" "$SNAPSHOT_FILE" --clobber
+          fi
