@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="360" viewBox="0 0 760 360" role="img" aria-labelledby="title desc">
+<title>Maritime Autonomy Watch dashboard for 2026-08-17</title>
+<desc>Daily selected item counts, source health, topic signals, and quality flags.</desc>
+<rect width="760" height="360" fill="#f8fafc"/>
+<text x="32" y="38" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#111827">Daily intelligence dashboard</text>
+<text x="32" y="64" font-family="Arial, sans-serif" font-size="13" fill="#475569">3 selected items</text>
+<rect x="32" y="82" width="150" height="54" rx="6" fill="#ffffff" stroke="#cbd5e1"/><text x="44" y="103" font-family="Arial, sans-serif" font-size="12" fill="#64748b">Items</text><text x="44" y="125" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#1f77b4">3</text>
+<rect x="206" y="82" width="150" height="54" rx="6" fill="#ffffff" stroke="#cbd5e1"/><text x="218" y="103" font-family="Arial, sans-serif" font-size="12" fill="#64748b">Enabled sources</text><text x="218" y="125" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#2ca02c">5</text>
+<rect x="380" y="82" width="150" height="54" rx="6" fill="#ffffff" stroke="#cbd5e1"/><text x="392" y="103" font-family="Arial, sans-serif" font-size="12" fill="#64748b">Source issues</text><text x="392" y="125" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#d62728">2</text>
+<rect x="554" y="82" width="150" height="54" rx="6" fill="#ffffff" stroke="#cbd5e1"/><text x="566" y="103" font-family="Arial, sans-serif" font-size="12" fill="#64748b">Quality flags</text><text x="566" y="125" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#9467bd">2</text>
+<text x="32" y="180" font-family="Arial, sans-serif" font-size="14" fill="#111827">Academic papers</text>
+<rect x="240" y="164" width="520" height="24" rx="4" fill="#e5e7eb"/>
+<rect x="240" y="164" width="520.0" height="24" rx="4" fill="#1f77b4"/>
+<text x="250" y="181" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#ffffff">2</text>
+<text x="32" y="222" font-family="Arial, sans-serif" font-size="14" fill="#111827">Industry/company news</text>
+<rect x="240" y="206" width="520" height="24" rx="4" fill="#e5e7eb"/>
+<rect x="240" y="206" width="0.0" height="24" rx="4" fill="#2ca02c"/>
+<text x="250" y="223" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#ffffff">0</text>
+<text x="32" y="264" font-family="Arial, sans-serif" font-size="14" fill="#111827">Defense/naval autonomy news</text>
+<rect x="240" y="248" width="520" height="24" rx="4" fill="#e5e7eb"/>
+<rect x="240" y="248" width="260.0" height="24" rx="4" fill="#d62728"/>
+<text x="250" y="265" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#ffffff">1</text>
+<text x="32" y="312" font-family="Arial, sans-serif" font-size="15" font-weight="700" fill="#111827">Top topic signals</text>
+<text x="32" y="338" font-family="Arial, sans-serif" font-size="12" fill="#334155">USV operations: 3</text>
+<text x="212" y="338" font-family="Arial, sans-serif" font-size="12" fill="#334155">swarm autonomy: 2</text>
+<text x="392" y="338" font-family="Arial, sans-serif" font-size="12" fill="#334155">perception: 1</text>
+</svg>
